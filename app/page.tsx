@@ -15,7 +15,7 @@ export default function Home() {
           loop
           muted
           playsInline
-          poster="/assets/duxbury-flag.png"
+          poster="/assets/beach-hero.png"
         >
           <source src="/videos/hero-loop.mp4" type="video/mp4" />
         </video>

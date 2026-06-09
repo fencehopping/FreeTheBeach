@@ -41,7 +41,7 @@ input {
   min-height: 92vh;
   overflow: hidden;
   isolation: isolate;
-  background: #15342f url("/assets/duxbury-flag.png") center / cover no-repeat;
+  background: #15342f url("/assets/beach-hero.png") center / cover no-repeat;
 }
 
 .announcement-bar {
