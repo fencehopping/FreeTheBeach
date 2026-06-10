@@ -17,7 +17,7 @@ export default function Home() {
           playsInline
           poster="/assets/beach-hero.png"
         >
-          <source src="/videos/hero-loop.mp4" type="video/mp4" />
+          <source src="/videos/birdhero.mp4" type="video/mp4" />
         </video>
         <div className="hero-scrim" />
         <header className="site-header" aria-label="Primary">
