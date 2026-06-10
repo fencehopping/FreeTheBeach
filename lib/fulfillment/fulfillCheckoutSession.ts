@@ -1,17 +1,41 @@
 import Stripe from "stripe";
-import { createDropshipOrder } from "@/lib/dropship/createDropshipOrder";
+import {
+  createDropshipOrder,
+  type DropshipOrderPayload
+} from "@/lib/dropship/createDropshipOrder";
+import {
+  getOrderByStripeCheckoutSessionId,
+  updateOrderByStripeCheckoutSessionId,
+  upsertOrderByStripeCheckoutSessionId
+} from "@/lib/orders/orderStore";
 import { getProduct } from "@/lib/products";
 
 export async function fulfillCheckoutSession(stripe: Stripe, session: Stripe.Checkout.Session) {
-  // TODO: Check persistent storage before fulfillment. Use session.id as the idempotency key,
-  // and store the provider order ID after createDropshipOrder succeeds.
+  const existingOrder = await getOrderByStripeCheckoutSessionId(session.id);
+
+  if (
+    existingOrder?.fulfillmentStatus === "fulfillment_submitted" &&
+    existingOrder.providerOrderId
+  ) {
+    console.info("Order already fulfilled, skipping dropship call", {
+      stripeCheckoutSessionId: session.id,
+      providerOrderId: existingOrder.providerOrderId
+    });
+
+    return {
+      provider: "stored",
+      providerOrderId: existingOrder.providerOrderId
+    };
+  }
+
   const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
     limit: 100
   });
 
   const product = session.metadata?.productId ? getProduct(session.metadata.productId) : undefined;
+  const paymentStatus = session.payment_status === "paid" ? "paid" : "pending_payment";
 
-  const payload = {
+  const payload: DropshipOrderPayload = {
     source: {
       provider: "stripe" as const,
       checkoutSessionId: session.id,
@@ -45,13 +69,75 @@ export async function fulfillCheckoutSession(stripe: Stripe, session: Stripe.Che
     }))
   };
 
-  const dropshipOrder = await createDropshipOrder(payload);
-
-  console.info("Dropship fulfillment scaffold complete", {
-    checkoutSessionId: session.id,
-    provider: dropshipOrder.provider,
-    providerOrderId: dropshipOrder.providerOrderId
+  const { order, created } = await upsertOrderByStripeCheckoutSessionId({
+    stripeCheckoutSessionId: session.id,
+    stripePaymentIntentId: payload.source.paymentIntentId,
+    customerEmail: payload.customer.email,
+    customerName: payload.customer.name,
+    shippingName: payload.shippingAddress?.name,
+    shippingAddressJson: payload.shippingAddress
+      ? JSON.stringify(payload.shippingAddress, null, 2)
+      : undefined,
+    lineItemsJson: JSON.stringify(payload.lineItems, null, 2),
+    variantId: session.metadata?.variantId ?? product?.variantId,
+    providerSku: session.metadata?.providerSku ?? product?.providerSku,
+    amountTotal: session.amount_total ?? undefined,
+    currency: session.currency ?? product?.currency,
+    paymentStatus,
+    fulfillmentStatus:
+      existingOrder?.fulfillmentStatus === "fulfillment_failed"
+        ? "fulfillment_pending"
+        : (existingOrder?.fulfillmentStatus ?? "fulfillment_pending"),
+    providerOrderId: existingOrder?.providerOrderId,
+    providerResponseJson: existingOrder?.providerResponseJson,
+    fulfillmentError: undefined
   });
 
-  return dropshipOrder;
+  console.info(created ? "Created order from Stripe session" : "Updated order from Stripe session", {
+    orderId: order.id,
+    stripeCheckoutSessionId: session.id,
+    paymentStatus
+  });
+
+  if (paymentStatus !== "paid") {
+    return {
+      provider: "deferred",
+      providerOrderId: order.providerOrderId ?? `pending_${session.id}`
+    };
+  }
+
+  try {
+    const dropshipOrder = await createDropshipOrder(payload);
+
+    await updateOrderByStripeCheckoutSessionId(session.id, {
+      fulfillmentStatus: "fulfillment_submitted",
+      providerOrderId: dropshipOrder.providerOrderId,
+      providerResponseJson: JSON.stringify(dropshipOrder, null, 2),
+      fulfillmentError: undefined
+    });
+
+    console.info("Submitted mock dropship order", {
+      orderId: order.id,
+      stripeCheckoutSessionId: session.id,
+      provider: dropshipOrder.provider,
+      providerOrderId: dropshipOrder.providerOrderId
+    });
+
+    return dropshipOrder;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown fulfillment error";
+
+    await updateOrderByStripeCheckoutSessionId(session.id, {
+      fulfillmentStatus: "fulfillment_failed",
+      fulfillmentError: message
+    });
+
+    console.error("Fulfillment failed", {
+      orderId: order.id,
+      stripeCheckoutSessionId: session.id,
+      error: message
+    });
+
+    throw error;
+  }
 }

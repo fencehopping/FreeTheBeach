@@ -51,3 +51,9 @@ stripe listen --forward-to localhost:3000/api/webhooks/stripe
 Copy the printed `whsec_...` value into `STRIPE_WEBHOOK_SECRET` in `.env.local`, restart `npm run dev`, then complete Checkout with Stripe test card `4242 4242 4242 4242`.
 
 The webhook route listens for `checkout.session.completed`, retrieves Checkout line items from Stripe, and passes a provider-neutral payload into the dropship scaffold at `lib/dropship/createDropshipOrder.ts`.
+
+## Order Persistence
+
+Webhook fulfillment persists orders to Supabase Postgres through the server-only store in `lib/orders/orderStore.ts`. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`; never expose the service role key to client code.
+
+Apply the orders table migration in `supabase/migrations/20260610000000_create_orders.sql` before testing webhooks against Supabase. The unique `stripe_checkout_session_id` column is the idempotency key that prevents duplicate dropship submissions.
