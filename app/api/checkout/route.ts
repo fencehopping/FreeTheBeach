@@ -20,6 +20,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unknown product." }, { status: 404 });
   }
 
+  if (!product.active) {
+    return NextResponse.json({ error: "Product is not available." }, { status: 410 });
+  }
+
   if (!stripeSecretKey) {
     return NextResponse.json(
       {
@@ -39,20 +43,30 @@ export async function POST(request: Request) {
       {
         quantity,
         price_data: {
-          currency: "usd",
+          currency: product.currency,
           unit_amount: product.price,
           product_data: {
             name: product.name,
             description: product.description,
-            images: [`${origin}${product.image}`]
+            images: [`${origin}${product.image}`],
+            metadata: {
+              productId: product.id,
+              variantId: product.variantId,
+              providerSku: product.providerSku
+            }
           }
         }
       }
     ],
+    shipping_address_collection: {
+      allowed_countries: ["US"]
+    },
     success_url: `${origin}/?checkout=success`,
     cancel_url: `${origin}/?checkout=cancelled`,
     metadata: {
-      productId: product.id
+      productId: product.id,
+      variantId: product.variantId,
+      providerSku: product.providerSku
     }
   });
 
