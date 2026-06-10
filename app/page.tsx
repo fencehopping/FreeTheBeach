@@ -4,10 +4,16 @@ import { formatPrice, products } from "@/lib/products";
 
 export default function Home() {
   const featuredProducts = products.filter((product) => product.featured);
+  const assetPath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  const withAssetPath = (path: string) => `${assetPath}${path}`;
+  const useStaticImages = Boolean(assetPath);
 
   return (
     <main>
-      <section className="hero">
+      <section
+        className="hero"
+        style={{ backgroundImage: `url("${assetPath}/assets/beach-hero.png")` }}
+      >
         <div className="announcement-bar">Not anti-bird. Anti-overreach.</div>
         <video
           className="hero-video"
@@ -15,14 +21,21 @@ export default function Home() {
           loop
           muted
           playsInline
-          poster="/assets/beach-hero.png"
+          poster={`${assetPath}/assets/beach-hero.png`}
         >
-          <source src="/videos/birdhero.mp4" type="video/mp4" />
+          <source src={`${assetPath}/videos/birdhero.mp4`} type="video/mp4" />
         </video>
         <div className="hero-scrim" />
         <header className="site-header" aria-label="Primary">
           <a className="brand" href="#top" aria-label="Free The Beach home">
-            <Image src="/assets/plover-white.png" alt="" width={44} height={44} priority />
+            <Image
+              src={withAssetPath("/assets/plover-white.png")}
+              alt=""
+              width={44}
+              height={44}
+              priority
+              unoptimized={useStaticImages}
+            />
             <span>Free The Beach</span>
           </a>
           <nav>
@@ -64,7 +77,8 @@ export default function Home() {
             <article className="product-card" key={product.id}>
               <div className="product-image">
                 <Image
-                  src={product.image}
+                  src={withAssetPath(product.image)}
+                  unoptimized={useStaticImages}
                   alt={`${product.name} - Free The Beach`}
                   fill
                   sizes="(max-width: 720px) 100vw, 25vw"
@@ -125,7 +139,13 @@ export default function Home() {
         <div className="featured-stack">
           {featuredProducts.map((product) => (
             <div className="mini-product" key={product.id}>
-              <Image src={product.image} alt={`${product.name} - Free The Beach`} width={88} height={88} />
+              <Image
+                src={withAssetPath(product.image)}
+                alt={`${product.name} - Free The Beach`}
+                width={88}
+                height={88}
+                unoptimized={useStaticImages}
+              />
               <div>
                 <strong>{product.name}</strong>
                 <span>{formatPrice(product.price)}</span>
